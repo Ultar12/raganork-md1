@@ -60,7 +60,8 @@ function handleLogLine(line, streamType) {
         'ERROR: Failed to initialize bot. Details: No valid session found',
         'SESSION LOGGED OUT. Please rescan QR and update SESSION.',
         'Reason: logout',
-        'Authentication Error'
+        'Authentication Error',
+        'ERROR: Max reconnection attempts reached. Stopping reconnection.' // <-- EVENT C ADDED HERE
     ];
 
     if (logoutPatterns.some(pattern => line.includes(pattern))) {
@@ -260,7 +261,7 @@ async function main() {
         await initializeDatabase();
         originalStdoutWrite.apply(process.stdout, ["- Database initialized\n"]);
     } catch (dbError) {
-        originalStderrWrite.apply(process.stderr, [`🚫 Failed to initialize database or load configuration. Bot cannot start. ${dbError.message}\n`]);
+        originalStderrWrite.apply(process.stderr, [`Failed to initialize database or load configuration. Bot cannot start. ${dbError.message}\n`]);
         process.exit(1);
     }
 
