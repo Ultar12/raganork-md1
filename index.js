@@ -167,73 +167,69 @@ async function sendTelegramAlert(text, chatId) { // chatId is now required
 
 // === "Logged out" alert with 24-hr cooldown & auto-delete ===
 async function sendInvalidSessionAlert(specificSessionId = null) {
-  const now = new Date();
-  if (lastLogoutAlertTime && (now - lastLogoutAlertTime) < 24 * 3600e3) {
-    originalStdoutWrite.apply(process.stdout, ['Skipping logout alert -- cooldown not expired.\n']);
-    return;
-  }
+    const now = new Date();
+    if (lastLogoutAlertTime && (now - lastLogoutAlertTime) < 24 * 3600e3) {
+        originalStdoutWrite.apply(process.stdout, ['Skipping logout alert -- cooldown not expired.\n']);
+        return;
+    }
 
-  const nowStr = now.toLocaleString('en-GB', { timeZone: 'Africa/Lagos' });
-  const hour = now.getHours();
-  const greeting = hour < 12 ? 'good morning'
-      : hour < 17 ? 'good afternoon'
-          : 'good evening';
+    const nowStr = now.toLocaleString('en-GB', { timeZone: 'Africa/Lagos' });
+    const hour = now.getHours();
+    const greeting = hour < 12 ? 'good morning'
+        : hour < 17 ? 'good afternoon'
+            : 'good evening';
 
-  const restartTimeDisplay = RESTART_DELAY_MINUTES >= 60 && (RESTART_DELAY_MINUTES % 60 === 0)
-      ? `${RESTART_DELAY_MINUTES / 60} hour(s)`
-      : `${RESTART_DELAY_MINUTES} minute(s)`;
+    const restartTimeDisplay = RESTART_DELAY_MINUTES >= 60 && (RESTART_DELAY_MINUTES % 60 === 0)
+        ? `${RESTART_DELAY_MINUTES / 60} hour(s)`
+        : `${RESTART_DELAY_MINUTES} minute(s)`;
 
-  let message =
-      `Hey Ult-AR, ${greeting}!\n\n` +
-      `User [${APP_NAME}] has logged out.`;
+    let message =
+        `Hey Ult-AR, ${greeting}!\n\n` +
+        `User [${APP_NAME}] has logged out.`;
 
-  if (specificSessionId) {
-      message += `\n[${specificSessionId}] invalid`;
-  } else {
-      message += `\n[UNKNOWN_SESSION] invalid`; 
-  }
+    if (specificSessionId) {
+        message += `\n[${specificSessionId}] invalid`;
+    } else {
+        message += `\n[UNKNOWN_SESSION] invalid`; 
+    }
 
-  message += `\nTime: ${nowStr}\n` +
-      `Restarting in ${restartTimeDisplay}.`;
+    message += `\nTime: ${nowStr}\n` +
+        `Restarting in ${restartTimeDisplay}.`;
 
-  try {
-      if (lastLogoutMessageId) {
-          try {
-              originalStdoutWrite.apply(process.stdout, [`Attempting to delete previous logout alert id ${lastLogoutMessageId}\n`]);
-              await axios.post(
-                  `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/deleteMessage`,
-                  { chat_id: TELEGRAM_USER_ID, message_id: lastLogoutMessageId }
-              );
-              originalStdoutWrite.apply(process.stdout, [`Deleted logout alert id ${lastLogoutMessageId}\n`]);
-          } catch (delErr) {
-              originalStderrWrite.apply(process.stderr, [`Failed to delete previous message ${lastLogoutMessageId}: ${delErr.message}\n`]);
-          }
-      }
+    try {
+        if (lastLogoutMessageId) {
+            try {
+                await axios.post(
+                    `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/deleteMessage`,
+                    { chat_id: TELEGRAM_USER_ID, message_id: lastLogoutMessageId }
+                );
+            } catch (delErr) { /* ignore */ }
+        }
 
-      const msgId = await sendTelegramAlert(message, TELEGRAM_USER_ID);
-      if (!msgId) return;
+        const msgId = await sendTelegramAlert(message, TELEGRAM_USER_ID);
+        if (!msgId) return;
 
-      lastLogoutMessageId = msgId;
-      lastLogoutAlertTime = now;
+        lastLogoutMessageId = msgId;
+        lastLogoutAlertTime = now;
 
-      await sendTelegramAlert(message, TELEGRAM_CHANNEL_ID);
-      originalStdoutWrite.apply(process.stdout, [`Sent new logout alert to channel ${TELEGRAM_CHANNEL_ID}\n`]);
+        await sendTelegramAlert(message, TELEGRAM_CHANNEL_ID);
+        originalStdoutWrite.apply(process.stdout, [`Sent new logout alert to channel ${TELEGRAM_CHANNEL_ID}\n`]);
 
-      if (!HEROKU_API_KEY || !APP_NAME) {
-          originalStdoutWrite.apply(process.stdout, ['HEROKU_API_KEY or APP_NAME is not set. Cannot persist LAST_LOGOUT_ALERT timestamp.\n']);
-          return;
-      }
-      const cfgUrl = `https://api.heroku.com/apps/${APP_NAME}/config-vars`;
-      const headers = {
-          Authorization: `Bearer ${HEROKU_API_KEY}`,
-          Accept: 'application/vnd.heroku+json; version=3',
-          'Content-Type': 'application/json'
-      };
-      await axios.patch(cfgUrl, { LAST_LOGOUT_ALERT: now.toISOString() }, { headers });
-      originalStdoutWrite.apply(process.stdout, [`Persisted LAST_LOGOUT_ALERT timestamp.\n`]);
-  } catch (err) {
-      originalStderrWrite.apply(process.stderr, [`Failed during sendInvalidSessionAlert(): ${err.message}\n`]);
-  }
+        if (!HEROKU_API_KEY || !APP_NAME) {
+            originalStdoutWrite.apply(process.stdout, ['HEROKU_API_KEY or APP_NAME is not set. Cannot persist LAST_LOGOUT_ALERT timestamp.\n']);
+            return;
+        }
+        const cfgUrl = `https://api.heroku.com/apps/${APP_NAME}/config-vars`;
+        const headers = {
+            Authorization: `Bearer ${HEROKU_API_KEY}`,
+            Accept: 'application/vnd.heroku+json; version=3',
+            'Content-Type': 'application/json'
+        };
+        await axios.patch(cfgUrl, { LAST_LOGOUT_ALERT: now.toISOString() }, { headers });
+        originalStdoutWrite.apply(process.stdout, [`Persisted LAST_LOGOUT_ALERT timestamp.\n`]);
+    } catch (err) {
+        originalStderrWrite.apply(process.stderr, [`Failed during sendInvalidSessionAlert(): ${err.message}\n`]);
+    }
 }
 
 // Function to handle bot connected messages
@@ -312,3 +308,4 @@ if (require.main === module) {
         process.exit(1);
     });
 }
+
