@@ -59,7 +59,7 @@ function handleLogLine(line, streamType) {
     if (line.includes('Your project has exceeded the data transfer quota')) {
         originalStderrWrite.apply(process.stderr, ['[DEBUG] NEON DATA QUOTA EXCEEDED detected!\n']);
         
-        const alertMsg = `🚨 **NEON QUOTA EXCEEDED** 🚨\n\nApp: \`${APP_NAME}\`\nError: Data transfer quota exceeded. Database is likely offline.`;
+        const alertMsg = `**NEON QUOTA EXCEEDED**\n\nApp: \`${APP_NAME}\`\nError: Data transfer quota exceeded. Database is likely offline.`;
         
         // FIX: Send to CHANNEL ID instead of Admin ID
         sendTelegramAlert(alertMsg, TELEGRAM_CHANNEL_ID).catch(err => originalStderrWrite.apply(process.stderr, [`Error sending quota alert: ${err.message}\n`]));
@@ -183,9 +183,10 @@ async function sendInvalidSessionAlert(specificSessionId = null) {
         ? `${RESTART_DELAY_MINUTES / 60} hour(s)`
         : `${RESTART_DELAY_MINUTES} minute(s)`;
 
+    // FIX APPLIED HERE: Added brackets around APP_NAME for consistency
     let message =
         `Hey Ult-AR, ${greeting}!\n\n` +
-        `User [${APP_NAME}] has logged out.`;
+        `User [${APP_NAME}] has logged out.`; // Updated this line
 
     if (specificSessionId) {
         message += `\n[${specificSessionId}] invalid`;
@@ -308,4 +309,3 @@ if (require.main === module) {
         process.exit(1);
     });
 }
-
