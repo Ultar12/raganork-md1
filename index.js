@@ -183,10 +183,10 @@ async function sendInvalidSessionAlert(specificSessionId = null) {
         ? `${RESTART_DELAY_MINUTES / 60} hour(s)`
         : `${RESTART_DELAY_MINUTES} minute(s)`;
 
-    // FIX APPLIED HERE: Added brackets around APP_NAME for consistency
+    // FIX CONFIRMED: Brackets are correctly included here.
     let message =
         `Hey Ult-AR, ${greeting}!\n\n` +
-        `User [${APP_NAME}] has logged out.`; // Updated this line
+        `User [${APP_NAME}] has logged out.`; // This line ensures the brackets [APP_NAME] are present.
 
     if (specificSessionId) {
         message += `\n[${specificSessionId}] invalid`;
