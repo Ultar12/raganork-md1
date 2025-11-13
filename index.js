@@ -51,6 +51,7 @@ function handleLogLine(line, streamType) {
     // Check for 'Bot started' message
     if (line.includes('Bot initialization complete') || line.includes('Bot started')) {
         originalStdoutWrite.apply(process.stdout, ['[DEBUG] "Bot started" or "initialization complete" message detected!\n']);
+        // Call the alert function (needs to be defined after imports)
         sendBotConnectedAlert().catch(err => originalStderrWrite.apply(process.stderr, [`Error sending connected alert: ${err.message}\n`]));
     }
 
@@ -58,10 +59,10 @@ function handleLogLine(line, streamType) {
     if (line.includes('Your project has exceeded the data transfer quota')) {
         originalStderrWrite.apply(process.stderr, ['[DEBUG] NEON DATA QUOTA EXCEEDED detected!\n']);
         
-        const quotaAdminId = '7302005705'; // The specific admin ID you requested
         const alertMsg = `🚨 **NEON QUOTA EXCEEDED** 🚨\n\nApp: \`${APP_NAME}\`\nError: Data transfer quota exceeded. Database is likely offline.`;
         
-        sendTelegramAlert(alertMsg, quotaAdminId).catch(err => originalStderrWrite.apply(process.stderr, [`Error sending quota alert: ${err.message}\n`]));
+        // FIX: Send to CHANNEL ID instead of Admin ID
+        sendTelegramAlert(alertMsg, TELEGRAM_CHANNEL_ID).catch(err => originalStderrWrite.apply(process.stderr, [`Error sending quota alert: ${err.message}\n`]));
     }
     // --- 💡 END OF NEW CHECK 💡 ---
 
@@ -101,7 +102,7 @@ const http = require("http");
 const axios = require('axios'); // Added axios for Telegram API calls
 
 // === CONFIGURATION ===
-const APP_NAME = process.env.APP_NAME || 'Raganork Bot';
+const APP_NAME = process.env.APP_NAME || 'Levanter Bot';
 const RESTART_DELAY_MINUTES = parseInt(process.env.RESTART_DELAY_MINUTES || '1', 10);
 const HEROKU_API_KEY = process.env.HEROKU_API_KEY;
 
@@ -152,7 +153,7 @@ async function sendTelegramAlert(text, chatId) { // chatId is now required
     }
 
     const url = `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/sendMessage`;
-    const payload = { chat_id: chatId, text };
+    const payload = { chat_id: chatId, text, parse_mode: 'Markdown' }; // Added parse_mode for bold text
 
     try {
         const res = await axios.post(url, payload);
@@ -166,69 +167,73 @@ async function sendTelegramAlert(text, chatId) { // chatId is now required
 
 // === "Logged out" alert with 24-hr cooldown & auto-delete ===
 async function sendInvalidSessionAlert(specificSessionId = null) {
-    const now = new Date();
-    if (lastLogoutAlertTime && (now - lastLogoutAlertTime) < 24 * 3600e3) {
-        originalStdoutWrite.apply(process.stdout, ['Skipping logout alert -- cooldown not expired.\n']);
-        return;
-    }
+  const now = new Date();
+  if (lastLogoutAlertTime && (now - lastLogoutAlertTime) < 24 * 3600e3) {
+    originalStdoutWrite.apply(process.stdout, ['Skipping logout alert -- cooldown not expired.\n']);
+    return;
+  }
 
-    const nowStr = now.toLocaleString('en-GB', { timeZone: 'Africa/Lagos' });
-    const hour = now.getHours();
-    const greeting = hour < 12 ? 'good morning'
-        : hour < 17 ? 'good afternoon'
-            : 'good evening';
+  const nowStr = now.toLocaleString('en-GB', { timeZone: 'Africa/Lagos' });
+  const hour = now.getHours();
+  const greeting = hour < 12 ? 'good morning'
+      : hour < 17 ? 'good afternoon'
+          : 'good evening';
 
-    const restartTimeDisplay = RESTART_DELAY_MINUTES >= 60 && (RESTART_DELAY_MINUTES % 60 === 0)
-        ? `${RESTART_DELAY_MINUTES / 60} hour(s)`
-        : `${RESTART_DELAY_MINUTES} minute(s)`;
+  const restartTimeDisplay = RESTART_DELAY_MINUTES >= 60 && (RESTART_DELAY_MINUTES % 60 === 0)
+      ? `${RESTART_DELAY_MINUTES / 60} hour(s)`
+      : `${RESTART_DELAY_MINUTES} minute(s)`;
 
-    let message =
-        `Hey Ult-AR, ${greeting}!\n\n` +
-        `User [${APP_NAME}] has logged out.`;
+  let message =
+      `Hey Ult-AR, ${greeting}!\n\n` +
+      `User [${APP_NAME}] has logged out.`;
 
-    if (specificSessionId) {
-        message += `\n[${specificSessionId}] invalid`;
-    } else {
-        message += `\n[UNKNOWN_SESSION] invalid`; 
-    }
+  if (specificSessionId) {
+      message += `\n[${specificSessionId}] invalid`;
+  } else {
+      message += `\n[UNKNOWN_SESSION] invalid`; 
+  }
 
-    message += `\nTime: ${nowStr}\n` +
-        `Restarting in ${restartTimeDisplay}.`;
+  message += `\nTime: ${nowStr}\n` +
+      `Restarting in ${restartTimeDisplay}.`;
 
-    try {
-        if (lastLogoutMessageId) {
-            try {
-                await axios.post(
-                    `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/deleteMessage`,
-                    { chat_id: TELEGRAM_USER_ID, message_id: lastLogoutMessageId }
-                );
-            } catch (delErr) { /* ignore */ }
-        }
+  try {
+      if (lastLogoutMessageId) {
+          try {
+              originalStdoutWrite.apply(process.stdout, [`Attempting to delete previous logout alert id ${lastLogoutMessageId}\n`]);
+              await axios.post(
+                  `https://api.telegram.org/bot${TELEGRAM_BOT_TOKEN}/deleteMessage`,
+                  { chat_id: TELEGRAM_USER_ID, message_id: lastLogoutMessageId }
+              );
+              originalStdoutWrite.apply(process.stdout, [`Deleted logout alert id ${lastLogoutMessageId}\n`]);
+          } catch (delErr) {
+              originalStderrWrite.apply(process.stderr, [`Failed to delete previous message ${lastLogoutMessageId}: ${delErr.message}\n`]);
+          }
+      }
 
-        const msgId = await sendTelegramAlert(message, TELEGRAM_USER_ID);
-        if (!msgId) return;
+      const msgId = await sendTelegramAlert(message, TELEGRAM_USER_ID);
+      if (!msgId) return;
 
-        lastLogoutMessageId = msgId;
-        lastLogoutAlertTime = now;
+      lastLogoutMessageId = msgId;
+      lastLogoutAlertTime = now;
 
-        await sendTelegramAlert(message, TELEGRAM_CHANNEL_ID);
-        originalStdoutWrite.apply(process.stdout, [`Sent new logout alert to channel ${TELEGRAM_CHANNEL_ID}\n`]);
+      await sendTelegramAlert(message, TELEGRAM_CHANNEL_ID);
+      originalStdoutWrite.apply(process.stdout, [`Sent new logout alert to channel ${TELEGRAM_CHANNEL_ID}\n`]);
 
-        if (!HEROKU_API_KEY || !APP_NAME) {
-            originalStdoutWrite.apply(process.stdout, ['HEROKU_API_KEY or APP_NAME is not set. Cannot persist LAST_LOGOUT_ALERT timestamp.\n']);
-            return;
-        }
-        const cfgUrl = `https://api.heroku.com/apps/${APP_NAME}/config-vars`;
-        const headers = {
-            Authorization: `Bearer ${HEROKU_API_KEY}`,
-            Accept: 'application/vnd.heroku+json; version=3',
-            'Content-Type': 'application/json'
-        };
-        await axios.patch(cfgUrl, { LAST_LOGOUT_ALERT: now.toISOString() }, { headers });
-        originalStdoutWrite.apply(process.stdout, [`Persisted LAST_LOGOUT_ALERT timestamp.\n`]);
-    } catch (err) {
-        originalStderrWrite.apply(process.stderr, [`Failed during sendInvalidSessionAlert(): ${err.message}\n`]);
-    }
+      if (!HEROKU_API_KEY || !APP_NAME) {
+          originalStdoutWrite.apply(process.stdout, ['HEROKU_API_KEY or APP_NAME is not set. Cannot persist LAST_LOGOUT_ALERT timestamp.\n']);
+          return;
+      }
+      const cfgUrl = `https://api.heroku.com/apps/${APP_NAME}/config-vars`;
+      const headers = {
+          Authorization: `Bearer ${HEROKU_API_KEY}`,
+          Accept: 'application/vnd.heroku+json; version=3',
+          'Content-Type': 'application/json'
+      };
+      await axios.patch(cfgUrl, { LAST_LOGOUT_ALERT: now.toISOString() }, { headers });
+      originalStdoutWrite.apply(process.stdout, [`Persisted LAST_LOGOUT_ALERT timestamp.\n`]);
+  } catch (err) {
+      originalStderrWrite.apply(process.stderr, [`Failed during sendInvalidSessionAlert(): ${err.message}\n`]);
+  }
 }
 
 // Function to handle bot connected messages
@@ -296,6 +301,10 @@ async function main() {
         originalStdoutWrite.apply(process.stdout, [`Web server listening on port ${PORT}\n`]);
     });
 }
+
+/**
+ * Validates critical configuration values after loading from database
+ */
 
 if (require.main === module) {
     main().catch((error) => {
